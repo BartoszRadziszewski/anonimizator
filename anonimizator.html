@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anonimizator dokumentów — 100% lokalnie w przeglądarce</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --paper:#F3F5F7; --card:#FFFFFF; --ink:#17222E; --ink-soft:#5B6B7B;
+  --accent:#0B7285; --accent-dk:#075462; --line:#DCE3EA; --warn:#B54708; --warn-bg:#FEF0E5;
+  --ok:#0E7C4A; --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --c-OSOBA:#FFE08A; --c-FIRMA:#D8F1A8; --c-PESEL:#FFC2CE; --c-NIP:#BDE8CC; --c-REGON:#CDEBDD;
+  --c-KRS:#D9E4D2; --c-KONTO:#C2DAFF; --c-KARTA:#D4E2FA; --c-EMAIL:#E4CCFF; --c-TEL:#C6EEFA;
+  --c-ADRES:#FFD9B0; --c-KOD:#FFE7C7; --c-DOWOD:#F3D1E4; --c-PASZPORT:#EFD6EE;
+  --c-DATA:#E3E7EC; --c-KWOTA:#E7E2D2; --c-FRAZA:#DADFF7;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font:15px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;padding-bottom:64px}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px}
+a{color:var(--accent)}
+
+/* ---------- header ---------- */
+header{padding:34px 0 10px}
+.brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.wordmark{font-family:'Sora',var(--mono);font-weight:700;font-size:clamp(26px,4.6vw,38px);letter-spacing:-.02em}
+.wordmark .bar{display:inline-block;background:var(--ink);color:var(--ink);border-radius:3px;
+  padding:0 .35em;transform:translateY(2px);user-select:none;position:relative}
+.wordmark .bar::after{content:"";position:absolute;inset:0;border-radius:3px;background:var(--ink)}
+.badge-local{font:600 11.5px/1 'Inter';color:var(--accent-dk);background:#E3F2F4;border:1px solid #BFDEE3;
+  padding:6px 10px;border-radius:999px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.lede{color:var(--ink-soft);max-width:62ch;margin:10px 0 0}
+.lede b{color:var(--ink)}
+
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:6px;margin:26px 0 0;border-bottom:2px solid var(--line)}
+.tab{appearance:none;border:0;background:none;font:600 14.5px 'Inter';color:var(--ink-soft);
+  padding:11px 16px;cursor:pointer;border-radius:10px 10px 0 0;position:relative;bottom:-2px;border-bottom:2px solid transparent}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);background:linear-gradient(#fff,#fff0)}
+.panel{display:none;padding-top:20px}
+.panel.active{display:block}
+
+/* ---------- settings ---------- */
+.settings{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px;margin:18px 0 22px}
+.settings h2{font:700 13px 'Sora';letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 12px}
+.set-grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:820px){.set-grid{grid-template-columns:1.35fr 1fr}}
+.modes{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.mode{border:1.5px solid var(--line);border-radius:11px;padding:10px 12px;cursor:pointer;background:#fff;flex:1;min-width:150px}
+.mode input{position:absolute;opacity:0;pointer-events:none}
+.mode .mt{font-weight:600;font-size:13.5px;display:block}
+.mode .ms{color:var(--ink-soft);font-size:12px;display:block;margin-top:2px}
+.mode .ex{font-family:var(--mono);font-size:11.5px;margin-top:6px;display:inline-block;background:var(--paper);
+  border-radius:6px;padding:2px 7px;color:var(--ink)}
+.mode:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px #0B728522}
+.mode:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:500 12.5px 'Inter';
+  cursor:pointer;color:var(--ink-soft);display:inline-flex;align-items:center;gap:7px}
+.chip .dot{width:10px;height:10px;border-radius:3px;background:var(--line)}
+.chip[aria-pressed="true"]{color:var(--ink);border-color:#B8C4CF;background:#FBFCFD}
+.chip[aria-pressed="true"] .dot{background:var(--dotc,var(--accent))}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.small, .small-h{display:block;font:600 12px 'Inter';color:var(--ink-soft);margin:0 0 6px;letter-spacing:.02em}
+textarea.custom{width:100%;min-height:74px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  font:13px/1.5 var(--mono);resize:vertical;background:#fff;color:var(--ink)}
+textarea.custom:focus{outline:2px solid var(--accent);outline-offset:1px}
+.hint{font-size:12px;color:var(--ink-soft);margin-top:6px}
+
+/* ---------- dropzone ---------- */
+.drop{border:2px dashed #B9C6D1;border-radius:16px;background:var(--card);padding:44px 24px;text-align:center;
+  cursor:pointer;transition:border-color .15s, background .15s}
+.drop.drag{border-color:var(--accent);background:#F0FAFB}
+.drop .big{font:600 17px 'Inter';margin:0 0 4px}
+.drop .fmt{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-top:10px;line-height:1.9}
+.drop .fmt span{background:var(--paper);border-radius:5px;padding:2px 6px;margin:0 2px;white-space:nowrap}
+.btn{appearance:none;border:0;border-radius:10px;background:var(--accent);color:#fff;font:600 14px 'Inter';
+  padding:11px 18px;cursor:pointer}
+.btn:hover{background:var(--accent-dk)}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost:hover{background:var(--paper)}
+.btn.sm{padding:8px 13px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- results ---------- */
+.results{margin-top:20px;display:flex;flex-direction:column;gap:12px}
+.file-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.fc-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fc-ic{width:38px;height:44px;border-radius:6px;background:var(--paper);border:1px solid var(--line);
+  display:grid;place-items:center;font:700 10px var(--mono);color:var(--ink-soft);flex:none}
+.fc-name{font-weight:600;font-size:14px;word-break:break-all}
+.fc-sub{font-size:12px;color:var(--ink-soft);margin-top:1px}
+.fc-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fc-counts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cnt{font:500 11.5px 'Inter';border-radius:6px;padding:3px 8px;background:var(--paper)}
+.fc-warn{margin-top:10px;background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:9px 12px;font-size:12.5px}
+.fc-info{margin-top:10px;background:#EDF6F7;color:var(--accent-dk);border-radius:9px;padding:9px 12px;font-size:12.5px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.spin{width:15px;height:15px;border:2px solid #fff8;border-top-color:#fff;border-radius:50%;
+  display:inline-block;vertical-align:-3px;animation:sp .7s linear infinite;margin-right:7px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- text panes ---------- */
+.two-pane{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:880px){.two-pane{grid-template-columns:1fr 1fr}}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.pane-h{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);
+  font:600 12px 'Inter';color:var(--ink-soft);letter-spacing:.05em;text-transform:uppercase}
+.pane-h .btn{margin-left:auto}
+.pane textarea{border:0;padding:14px;min-height:260px;font:13.5px/1.65 var(--mono);resize:vertical;background:transparent;color:var(--ink)}
+.pane textarea:focus{outline:none}
+.out{padding:14px;min-height:260px;font:13.5px/1.75 var(--mono);white-space:pre-wrap;word-break:break-word;overflow:auto}
+.out:empty::before{content:attr(data-empty);color:#9AA7B4}
+mark{border-radius:4px;padding:1px 3px;background:var(--mc,#eee);color:var(--ink)}
+mark.black{background:var(--ink);color:var(--ink)}
+.stats-line{font-size:12.5px;color:var(--ink-soft);margin-top:10px}
+
+/* ---------- key table ---------- */
+.keybox{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-top:26px;overflow:hidden}
+.keybox summary{padding:14px 16px;font:600 14px 'Inter';cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px}
+.keybox summary::-webkit-details-marker{display:none}
+.keybox summary .n{background:var(--paper);border-radius:999px;padding:2px 9px;font:600 12px var(--mono)}
+.keybox summary .btn{margin-left:auto}
+.key-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.key-table th{font:600 11px 'Inter';text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);
+  text-align:left;padding:8px 16px;border-top:1px solid var(--line)}
+.key-table td{padding:7px 16px;border-top:1px solid #EDF1F4;font-family:var(--mono);vertical-align:top;word-break:break-all}
+.key-table td.cat{font-family:'Inter';white-space:nowrap}
+.key-warn{padding:10px 16px;background:var(--warn-bg);color:var(--warn);font-size:12.5px}
+
+/* ---------- notes / footer ---------- */
+.notes{margin-top:28px;font-size:12.5px;color:var(--ink-soft);background:var(--card);
+  border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.notes h3{margin:0 0 8px;font:700 12px 'Sora';letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft)}
+.notes ul{margin:0;padding-left:18px}
+.notes li{margin:4px 0}
+.notes li b{color:var(--ink)}
+footer{margin-top:26px;font-size:12px;color:#8A97A4;text-align:center}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="wordmark">Anonimi<span class="bar" aria-hidden="true">zator</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">zator</span></div>
+    <span class="badge-local">100% lokalnie · pliki nie opuszczają przeglądarki</span>
+  </div>
+  <p class="lede">Wgraj dokument lub wklej tekst — aplikacja wykryje dane wrażliwe (<b>PESEL, NIP, REGON, KRS, nr dowodu, konta bankowe, e-maile, telefony, adresy, imiona i nazwiska, nazwy spółek</b>), zamaskuje je z zachowaniem struktury pliku i pozwoli później <b>przywrócić prawdziwe dane</b> w odpowiedzi z AI. Identyfikatory są weryfikowane sumami kontrolnymi, a metadane autora czyszczone.</p>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Tryby pracy">
+  <button class="tab" role="tab" id="tab-files" aria-controls="panel-files" aria-selected="true">Pliki</button>
+  <button class="tab" role="tab" id="tab-text" aria-controls="panel-text" aria-selected="false">Tekst</button>
+  <button class="tab" role="tab" id="tab-restore" aria-controls="panel-restore" aria-selected="false">Przywróć dane</button>
+</nav>
+
+<section class="settings" aria-label="Ustawienia anonimizacji">
+  <h2>Ustawienia</h2>
+  <div class="modes" role="radiogroup" aria-label="Tryb maskowania">
+    <label class="mode"><input type="radio" name="mode" value="tags" checked>
+      <span class="mt">Etykiety</span><span class="ms">spójna pseudonimizacja, odwracalna</span><span class="ex">[OSOBA_1]</span></label>
+    <label class="mode"><input type="radio" name="mode" value="fake">
+      <span class="mt">Dane fikcyjne</span><span class="ms">realistyczne zamienniki (poprawne sumy kontrolne)</span><span class="ex">Adam Nowak</span></label>
+    <label class="mode"><input type="radio" name="mode" value="black">
+      <span class="mt">Zaczernianie</span><span class="ms">trwałe, nieodwracalne</span><span class="ex">██████</span></label>
+  </div>
+  <div class="set-grid">
+    <div>
+      <span class="small-h">Wykrywane kategorie</span>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div>
+      <label class="small" for="custom">Własne frazy (jedna w linii — np. nazwy klientów, projektów)</label>
+      <textarea id="custom" class="custom" placeholder="Firma S.A.&#10;Projekt X&#10;Imię i Nazwisko"></textarea>
+      <div class="hint">Frazy są dopasowywane bez rozróżniania wielkości liter i maskowane jako [FRAZA_n].</div>
+    </div>
+  </div>
+</section>
+
+<!-- FILES -->
+<section class="panel active" id="panel-files" role="tabpanel" aria-labelledby="tab-files">
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Wybierz lub upuść pliki">
+    <p class="big">Upuść pliki tutaj lub kliknij, aby wybrać</p>
+    <p style="color:var(--ink-soft);margin:0">Można wgrać wiele plików naraz. Struktura i formatowanie dokumentów zostają zachowane.</p>
+    <p class="fmt"><span>.pdf</span><span>.docx</span><span>.xlsx</span><span>.pptx</span><span>.odt</span><span>.ods</span><span>.odp</span><span>.xls</span><span>.txt</span><span>.csv</span><span>.md</span><span>.json</span><span>.xml</span><span>.html</span><span>.vcs</span><span>.vcf</span><span>.ics</span><span>.rtf</span><span>.log</span></p>
+    <input type="file" id="fileInput" multiple hidden
+      accept=".pdf,.txt,.csv,.md,.log,.json,.xml,.html,.htm,.vcs,.vcf,.ics,.rtf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.gdoc,.gsheet,.gslides">
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="zipAll" disabled>Pobierz wszystko (.zip)</button>
+    <button class="btn ghost" id="clearFiles" disabled>Wyczyść listę</button>
+    <span class="stats-line" id="filesStats"></span>
+  </div>
+  <div class="results" id="results"></div>
+</section>
+
+<!-- TEXT -->
+<section class="panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text">
+  <div class="two-pane">
+    <div class="pane">
+      <div class="pane-h">Tekst źródłowy
+        <button class="btn ghost sm" id="txtDemo">Wstaw przykład</button>
+      </div>
+      <textarea id="txtIn" spellcheck="false" placeholder="Wklej tekst umowy, maila, notatki…"></textarea>
+    </div>
+    <div class="pane">
+      <div class="pane-h">Wersja bezpieczna
+        <button class="btn sm" id="txtCopy">Kopiuj</button>
+      </div>
+      <div class="out" id="txtOut" data-empty="Wynik pojawi się tutaj automatycznie."></div>
+    </div>
+  </div>
+  <div class="stats-line" id="txtStats"></div>
+</section>
+
+<!-- RESTORE -->
+<section class="panel" id="panel-restore" role="tabpanel" aria-labelledby="tab-restore">
+  <p style="max-width:70ch;color:var(--ink-soft);margin:2px 0 14px">Wklej odpowiedź z AI zawierającą etykiety (np. <span style="font-family:var(--mono)">[OSOBA_1]</span>) lub dane fikcyjne z tej sesji — aplikacja podstawi z powrotem prawdziwe wartości. Działa na kluczu przechowywanym wyłącznie w pamięci tej karty.</p>
+  <div class="two-pane">
+    <div class="pane">
+      <div class="pane-h">Odpowiedź z AI (zanonimizowana)</div>
+      <textarea id="resIn" spellcheck="false" placeholder="Wklej tekst z etykietami lub danymi fikcyjnymi…"></textarea>
+    </div>
+    <div class="pane">
+      <div class="pane-h">Z przywróconymi danymi
+        <button class="btn sm" id="resCopy">Kopiuj</button>
+      </div>
+      <div class="out" id="resOut" data-empty="Tu zobaczysz tekst z prawdziwymi danymi."></div>
+    </div>
+  </div>
+  <div class="stats-line" id="resStats"></div>
+</section>
+
+<!-- KEY -->
+<details class="keybox" id="keybox">
+  <summary>Klucz pseudonimizacji tej sesji <span class="n" id="keyCount">0</span>
+    <button class="btn ghost sm" id="keyCsv" type="button">Eksport CSV</button>
+    <button class="btn ghost sm" id="keyClear" type="button">Wyczyść klucz</button>
+  </summary>
+  <div class="key-warn">Klucz łączy dane prawdziwe z zamiennikami — traktuj go jak dane wrażliwe. Istnieje tylko w pamięci tej karty; odświeżenie strony go usuwa.</div>
+  <div style="overflow-x:auto"><table class="key-table" id="keyTable">
+    <thead><tr><th>Oryginał</th><th>Etykieta</th><th>Dane fikcyjne</th><th>Kategoria</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+</details>
+
+<div class="notes">
+  <h3>Zakres i ograniczenia</h3>
+  <ul>
+    <li><b>DOCX / XLSX / PPTX / ODT / ODS / ODP</b> — pełna anonimizacja w strukturze pliku (treść, nagłówki, stopki, notatki prelegenta, komórki liczbowe) + czyszczenie metadanych autora.</li>
+    <li><b>PDF</b> — tekst jest wyodrębniany, anonimizowany i zapisywany jako .txt (układ graficzny nie jest odtwarzany). Skany bez warstwy tekstowej wymagają wcześniejszego OCR.</li>
+    <li><b>XLS</b> (stary format) — konwersja do .xlsx z anonimizacją wartości; część formatowania może zostać uproszczona.</li>
+    <li><b>DOC / PPT</b> (formaty binarne z lat 97–2003) — zapisz plik jako .docx / .pptx i wgraj ponownie.</li>
+    <li><b>GDOC / GSHEET / GSLIDES</b> — to skróty do plików w chmurze Google; pobierz dokument jako DOCX/XLSX/PPTX (Plik → Pobierz) i wgraj tutaj.</li>
+    <li>Wykrywanie imion i nazwisk oraz adresów jest heurystyczne — <b>zawsze przejrzyj wynik</b> i uzupełnij pole „Własne frazy” o specyficzne nazwy.</li>
+    <li>W arkuszach zamiana wartości na etykiety może przerwać formuły odwołujące się do tych komórek — plik wynikowy służy do bezpiecznego udostępniania.</li>
+  </ul>
+</div>
+
+<footer>Przetwarzanie odbywa się wyłącznie w Twojej przeglądarce (JavaScript, bez wysyłki na serwer) — zgodnie z zasadą minimalizacji danych (art. 5 ust. 1 lit. c RODO).</footer>
+
+</div>
+<script>
+"use strict";
+/* =====================  WALIDATORY (sumy kontrolne)  ===================== */
+const digits = s => (s.match(/\d/g) || []).join('');
+
+function validPESEL(v){
+  const d = digits(v); if (d.length !== 11) return false;
+  const mm = +d.slice(2,4), mN = mm % 20;
+  if (mN < 1 || mN > 12 || mm > 92) return false;
+  const dd = +d.slice(4,6); if (dd < 1 || dd > 31) return false;
+  const w = [1,3,7,9,1,3,7,9,1,3];
+  let s = 0; for (let i=0;i<10;i++) s += +d[i]*w[i];
+  return (10 - s%10) % 10 === +d[10];
+}
+function validNIP(v){
+  const d = digits(v); if (d.length !== 10) return false;
+  if (/^(\d)\1{9}$/.test(d)) return false;
+  const w = [6,5,7,2,3,4,5,6,7];
+  let s = 0; for (let i=0;i<9;i++) s += +d[i]*w[i];
+  const c = s % 11; return c !== 10 && c === +d[9];
+}
+function validREGON(v){
+  const d = digits(v);
+  if (d.length === 9){
+    const w = [8,9,2,3,4,5,6,7]; let s=0;
+    for (let i=0;i<8;i++) s += +d[i]*w[i];
+    return (s%11)%10 === +d[8];
+  }
+  if (d.length === 14){
+    const w = [2,4,8,5,0,9,7,3,6,1,2,4,8]; let s=0;
+    for (let i=0;i<13;i++) s += +d[i]*w[i];
+    return (s%11)%10 === +d[13];
+  }
+  return false;
+}
+function validDowod(v){
+  const t = v.replace(/\s+/g,'').toUpperCase();
+  if (!/^[A-Z]{3}\d{6}$/.test(t)) return false;
+  const val = c => c >= 'A' ? c.charCodeAt(0) - 55 : +c;
+  const w = [7,3,1,0,7,3,1,7,3];
+  let s = 0; for (let i=0;i<9;i++) s += val(t[i]) * w[i];
+  return s % 10 === val(t[3]);
+}
+function mod97(str){ let r = 0; for (const ch of str) r = (r*10 + +ch) % 97; return r; }
+function ibanDigits(t){ return t.replace(/[A-Z]/g, c => String(c.charCodeAt(0) - 55)); }
+function validIBANPL(v){
+  let t = v.replace(/[\s-]/g,'').toUpperCase();
+  if (/^\d{26}$/.test(t)) t = 'PL' + t;
+  if (!/^PL\d{26}$/.test(t)) return false;
+  return mod97(ibanDigits(t.slice(4) + t.slice(0,4))) === 1;
+}
+function validLuhn(v){
+  const d = digits(v); if (d.length < 13 || d.length > 19) return false;
+  let s = 0, alt = false;
+  for (let i = d.length-1; i >= 0; i--){
+    let n = +d[i]; if (alt){ n *= 2; if (n > 9) n -= 9; }
+    s += n; alt = !alt;
+  }
+  return s % 10 === 0 && !/^(\d)\1+$/.test(d);
+}
+
+/* =====================  SŁOWNIK IMION + ODMIANY  ===================== */
+const IMIONA_M = "Adam Adrian Aleksander Andrzej Antoni Arkadiusz Artur Bartłomiej Bartosz Bogdan Bogusław Cezary Damian Daniel Dariusz Dawid Dominik Edward Emil Ernest Eugeniusz Fabian Filip Franciszek Grzegorz Henryk Hubert Ignacy Igor Ireneusz Jacek Jakub Jan Janusz Jarosław Jerzy Józef Julian Kacper Kamil Karol Kazimierz Konrad Krystian Krzysztof Leszek Łukasz Maciej Marcin Marek Marian Mariusz Mateusz Michał Mieczysław Mikołaj Miłosz Mirosław Norbert Olaf Oskar Patryk Paweł Piotr Przemysław Radosław Rafał Robert Roman Ryszard Sebastian Sławomir Stanisław Stefan Szymon Tadeusz Tomasz Waldemar Wiesław Wiktor Witold Wojciech Zbigniew Zdzisław Zygmunt".split(/\s+/);
+const IMIONA_F = "Agata Agnieszka Aleksandra Alicja Aneta Anna Barbara Beata Bożena Celina Danuta Dorota Edyta Elżbieta Emilia Ewa Ewelina Gabriela Grażyna Halina Hanna Helena Irena Iwona Izabela Jadwiga Janina Joanna Jolanta Julia Justyna Kamila Karolina Katarzyna Kinga Klaudia Krystyna Laura Lena Lidia Liliana Lucyna Magdalena Maja Małgorzata Maria Marianna Marta Martyna Marzena Milena Monika Natalia Nikola Olga Oliwia Patrycja Paulina Renata Sandra Stanisława Sylwia Teresa Urszula Weronika Wiesława Wiktoria Zofia Zuzanna Żaneta".split(/\s+/);
+const IMIONA = IMIONA_M.concat(IMIONA_F);
+
+function nameVariants(n){
+  const v = new Set([n]);
+  if (n.endsWith('ia')){ const st = n.slice(0,-1); ['i','ę','ą'].forEach(s=>v.add(st+s)); }
+  else if (n.endsWith('a')){ const st = n.slice(0,-1); ['y','i','ę','ą','o'].forEach(s=>v.add(st+s)); }
+  else { ['a','owi','em','u','ie'].forEach(s=>v.add(n+s)); }
+  return [...v];
+}
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const MALE_VARS = (() => {
+  const s = new Set();
+  for (const n of IMIONA_M) for (const w of nameVariants(n)){ s.add(w); s.add(w.toUpperCase()); }
+  return s;
+})();
+const NAME_ALTS = (() => {
+  const all = new Set();
+  for (const n of IMIONA) for (const w of nameVariants(n)){ all.add(w); all.add(w.toUpperCase()); }
+  return [...all].sort((a,b)=>b.length-a.length).map(escRe).join('|');
+})();
+
+/* =====================  DEFINICJE DETEKTORÓW  ===================== */
+const SURNAME = "(?:\\p{Lu}[\\p{Ll}]+(?:-\\p{Lu}[\\p{Ll}]+)?|\\p{Lu}{3,}(?:-\\p{Lu}{3,})?)";
+const LEGAL = "(?:S\\.?\\s?K\\.?\\s?A\\.?|S\\.?A\\.?|[Ss]p\\.?\\s?z\\s?o\\.?\\s?o\\.?|[Ss]p\\.?\\s?[jk]\\.?|S\\.?C\\.?)";
+const MIESIACE = "(?:stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)";
+
+const DETECTORS = [
+  { id:'FRAZA',  label:'Własne frazy', prio:200, custom:true },
+  { id:'KONTO',  label:'Nr konta (IBAN/NRB)', prio:150,
+    src:"(?<![\\dA-Z])(?:PL[\\s-]?)?\\d{2}(?:[\\s-]?\\d{4}){6}(?![\\d])", flags:'g', validate:validIBANPL },
+  { id:'KARTA',  label:'Karty płatnicze', prio:140,
+    src:"(?<!\\d)(?:\\d[\\s-]?){12,18}\\d(?!\\d)", flags:'g', validate:validLuhn },
+  { id:'PESEL',  label:'PESEL', prio:130, src:"(?<!\\d)\\d{11}(?!\\d)", flags:'g', validate:validPESEL },
+  { id:'NIP',    label:'NIP', prio:120,
+    src:"(?<![\\d-])(?:PL\\s?)?(?:\\d{3}[- ]\\d{3}[- ]\\d{2}[- ]\\d{2}|\\d{3}[- ]\\d{2}[- ]\\d{2}[- ]\\d{3}|\\d{10})(?![\\d-])", flags:'g', validate:validNIP },
+  { id:'REGON',  label:'REGON', prio:115, src:"(?<!\\d)(?:\\d{14}|\\d{9})(?!\\d)", flags:'g', validate:validREGON },
+  { id:'KRS',    label:'KRS', prio:110, src:"(?<=\\bKRS[\\s:.]{0,4})\\d{10}(?!\\d)", flags:'g' },
+  { id:'DOWOD',  label:'Nr dowodu', prio:100, src:"(?<![A-Z\\p{L}])[A-Z]{3}\\s?\\d{6}(?!\\d)", flags:'gu', validate:validDowod },
+  { id:'PASZPORT', label:'Nr paszportu', prio:95,
+    src:"(?<=[Pp]aszport(?:u|em|owi)?[\\s:.nr]{0,6})[A-Z]{2}\\s?\\d{7}(?!\\d)", flags:'gu' },
+  { id:'EMAIL',  label:'E-mail', prio:90,
+    src:"[\\p{L}\\p{N}._%+-]+@[\\p{L}\\p{N}.-]+\\.[\\p{L}]{2,}", flags:'gu' },
+  { id:'TEL',    label:'Telefon', prio:80,
+    src:"(?<![\\d-])(?:\\+?48[\\s-]?)?\\d{3}[\\s-]?\\d{3}[\\s-]?\\d{3}(?![\\d-])", flags:'g',
+    validate:v => digits(v).length === 9 || digits(v).length === 11 },
+  { id:'ADRES',  label:'Adresy', prio:70,
+    src:"(?<![\\p{L}])(?:[Uu]l\\.|[Uu]lic[aiy]|[Aa]l\\.|[Aa]le[ij][aei]?|[Pp]l\\.|[Pp]lac[u]?|[Oo]s\\.|[Oo]siedl[ue])[\\s\\u00A0]+\\p{Lu}[^\\n,;()]{0,40}?\\s?\\d+[a-zA-Z]?(?:\\s?/\\s?\\d+[a-zA-Z]?)?(?:\\s?(?:m\\.|lok\\.)\\s?\\d+)?", flags:'gu' },
+  { id:'FIRMA',  label:'Nazwy spółek', prio:65,
+    src:"(?<![\\p{L}])(?:[\\p{Lu}][\\p{L}\\p{N}&'’.-]*[\\s\\u00A0]+){1,5}" + LEGAL + "(?![\\p{L}])", flags:'gu' },
+  { id:'OSOBA',  label:'Imiona i nazwiska', prio:60,
+    src:"(?<![\\p{L}])(?:" + NAME_ALTS + ")[\\s\\u00A0]+" + SURNAME + "(?![\\p{L}])", flags:'gu' },
+  { id:'KOD',    label:'Kody pocztowe', prio:50, src:"(?<![\\d-])\\d{2}-\\d{3}(?![\\d-])", flags:'g' },
+  { id:'DATA',   label:'Daty', prio:40, off:true,
+    src:"(?<!\\d)(?:\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}\\s" + MIESIACE + "\\s\\d{4})(?!\\d)", flags:'gu' },
+  { id:'KWOTA',  label:'Kwoty', prio:30, off:true,
+    src:"(?<![\\d,.])\\d{1,3}(?:[\\s\\u00A0.]\\d{3})*(?:,\\d{2})?\\s?(?:zł|PLN|EUR|USD|GBP|€|\\$)", flags:'gu' }
+];
+for (const d of DETECTORS) if (d.src) d.re = new RegExp(d.src, d.flags);
+
+const KAT_LABEL = Object.fromEntries(DETECTORS.map(d => [d.id, d.label]));
+const NUM_CATS = ['KONTO','KARTA','PESEL','NIP','REGON','TEL'];
+
+/* =====================  KLUCZ PSEUDONIMIZACJI (sesja)  ===================== */
+const state = { entries: new Map(), counters: {}, order: [] };
+
+function normKey(cat, val){
+  if (NUM_CATS.includes(cat) || cat === 'KRS') return cat + '|' + digits(val);
+  if (cat === 'DOWOD' || cat === 'PASZPORT') return cat + '|' + val.replace(/\s+/g,'').toUpperCase();
+  if (cat === 'EMAIL') return cat + '|' + val.toLowerCase();
+  return cat + '|' + val.toLowerCase().replace(/[\s\u00A0]+/g,' ').trim();
+}
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){ a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const rndDigits = (rng, n) => Array.from({length:n}, () => Math.floor(rng()*10)).join('');
+
+function fakePESEL(rng){
+  for(;;){
+    const y = 1955 + Math.floor(rng()*50), m = 1 + Math.floor(rng()*12), day = 1 + Math.floor(rng()*28);
+    const mm = y >= 2000 ? m + 20 : m;
+    const d = String(y).slice(2) + String(mm).padStart(2,'0') + String(day).padStart(2,'0') + rndDigits(rng,4);
+    const w = [1,3,7,9,1,3,7,9,1,3];
+    let s = 0; for (let i=0;i<10;i++) s += +d[i]*w[i];
+    const p = d + String((10 - s%10) % 10);
+    if (validPESEL(p)) return p;
+  }
+}
+function fakeNIP(rng){
+  for(;;){
+    const d = String(1 + Math.floor(rng()*9)) + rndDigits(rng,8);
+    const w = [6,5,7,2,3,4,5,6,7];
+    let s = 0; for (let i=0;i<9;i++) s += +d[i]*w[i];
+    if (s % 11 !== 10) return d + String(s % 11);
+  }
+}
+function fakeREGON(rng){
+  const d = rndDigits(rng,8);
+  const w = [8,9,2,3,4,5,6,7];
+  let s = 0; for (let i=0;i<8;i++) s += +d[i]*w[i];
+  return d + String((s % 11) % 10);
+}
+function fakeIBAN(rng){
+  const bban = '10901014' + rndDigits(rng,16);
+  const check = 98 - mod97(ibanDigits(bban + 'PL00'));
+  const t = 'PL' + String(check).padStart(2,'0') + bban;
+  return t.slice(0,4) + ' ' + t.slice(4).replace(/(\d{4})(?=\d)/g,'$1 ');
+}
+function fakeKarta(rng){
+  const d = '4' + rndDigits(rng,14);
+  let s = 0, alt = true;
+  for (let i = d.length-1; i >= 0; i--){
+    let n = +d[i]; if (alt){ n *= 2; if (n > 9) n -= 9; } s += n; alt = !alt;
+  }
+  const c = (10 - s%10) % 10;
+  return (d + c).replace(/(\d{4})(?=\d)/g,'$1 ');
+}
+function fakeDowod(rng){
+  const L = 'ABCDEFGHIJKLMNPRSTUWZ';
+  const ser = L[Math.floor(rng()*L.length)] + L[Math.floor(rng()*L.length)] + L[Math.floor(rng()*L.length)];
+  const rest = rndDigits(rng,5);
+  const val = c => c >= 'A' ? c.charCodeAt(0) - 55 : +c;
+  const w = [7,3,1,0,7,3,1,7,3];
+  const chars = (ser + '0' + rest).split('');
+  let s = 0; for (let i=0;i<9;i++) if (i !== 3) s += val(chars[i]) * w[i];
+  return ser + String(s % 10) + rest;
+}
+const F_IM_M = ['Adam','Marek','Piotr','Paweł','Tomasz','Michał','Karol','Filip','Robert','Szymon'];
+const F_IM_F = ['Anna','Ewa','Maria','Joanna','Magdalena','Karolina','Beata','Monika','Alicja','Hanna'];
+const F_NAZ_M = ['Nowak','Wiśniewski','Wójcik','Kowalczyk','Kamiński','Lewandowski','Zieliński','Szymański','Woźniak','Mazur'];
+const F_NAZ_F = ['Nowak','Wiśniewska','Wójcik','Kowalczyk','Kamińska','Lewandowska','Zielińska','Szymańska','Woźniak','Mazur'];
+const F_FIRMY = ['Alfa','Beta','Gamma','Delta','Epsilon','Omega','Sigma','Orion','Atlas','Nexus'];
+const F_ULICE = ['Przykładowa','Wzorcowa','Testowa','Modelowa','Poglądowa'];
+
+function makeFake(cat, original, n){
+  const rng = mulberry32(n * 2654435761 + cat.length * 97);
+  switch(cat){
+    case 'PESEL': return fakePESEL(rng);
+    case 'NIP': return fakeNIP(rng);
+    case 'REGON': return fakeREGON(rng);
+    case 'KONTO': return fakeIBAN(rng);
+    case 'KARTA': return fakeKarta(rng);
+    case 'DOWOD': return fakeDowod(rng);
+    case 'PASZPORT': return 'ZZ' + rndDigits(rng,7);
+    case 'KRS': return String(9000000 + n).padStart(10,'0');
+    case 'EMAIL': return 'kontakt' + n + '@przyklad.pl';
+    case 'TEL': return '+48 600 100 ' + String((100 + n) % 1000).padStart(3,'0');
+    case 'KOD': return '00-9' + String(n % 100).padStart(2,'0');
+    case 'ADRES': return 'ul. ' + F_ULICE[(n-1) % F_ULICE.length] + ' ' + (1 + (n*7) % 40);
+    case 'FIRMA': return F_FIRMY[(n-1) % F_FIRMY.length] + (n > F_FIRMY.length ? ' ' + Math.ceil(n / F_FIRMY.length) : '') + ' Sp. z o.o.';
+    case 'DATA': return String(1 + (n % 27)).padStart(2,'0') + '.' + String(1 + (n % 12)).padStart(2,'0') + '.' + (2019 + (n % 6));
+    case 'KWOTA': return (100 + (n * 111) % 900) + ' 000,00 zł';
+    case 'OSOBA': {
+      const first = original.split(/[\s\u00A0]+/)[0];
+      const fem = !MALE_VARS.has(first) && /a$/i.test(first);
+      const i = (n-1) % 10, j = Math.floor((n-1) / 10) % 10;
+      return (fem ? F_IM_F[i] + ' ' + F_NAZ_F[j] : F_IM_M[i] + ' ' + F_NAZ_M[j]);
+    }
+    default: return 'Podmiot ' + n;
+  }
+}
+function getEntry(cat, value){
+  const key = normKey(cat, value);
+  let e = state.entries.get(key);
+  if (!e){
+    state.counters[cat] = (state.counters[cat] || 0) + 1;
+    const n = state.counters[cat];
+    e = { cat, original: value, token: '[' + cat + '_' + n + ']', fake: makeFake(cat, value, n), n };
+    state.entries.set(key, e);
+    state.order.push(e);
+  }
+  return e;
+}
+function clearKey(){ state.entries.clear(); state.order.length = 0; for (const k in state.counters) delete state.counters[k]; }
+
+/* =====================  DETEKCJA + ZASTOSOWANIE  ===================== */
+function buildCustomRegexes(rawText){
+  return rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+    .sort((a,b) => b.length - a.length)
+    .map(p => new RegExp("(?<![\\p{L}\\p{N}])" + escRe(p) + "(?![\\p{L}\\p{N}])", 'giu'));
+}
+function detect(text, opts){
+  const found = [], taken = [];
+  const overlaps = (s,e) => taken.some(([a,b]) => s < b && e > a);
+  const dets = DETECTORS.filter(d => opts.cats.has(d.id)).sort((a,b) => b.prio - a.prio);
+  for (const det of dets){
+    const regs = det.custom ? opts.customRes : [det.re];
+    for (const re of regs){
+      if (!re) continue;
+      re.lastIndex = 0; let m;
+      while ((m = re.exec(text))){
+        const s = m.index, e = s + m[0].length;
+        if (m[0].length === 0){ re.lastIndex++; continue; }
+        if (det.validate && !det.validate(m[0])) continue;
+        if (overlaps(s,e)) continue;
+        taken.push([s,e]);
+        found.push({ start:s, end:e, value:m[0], cat:det.id });
+      }
+    }
+  }
+  return found.sort((a,b) => a.start - b.start);
+}
+function replacementFor(f, mode){
+  if (mode === 'black') return '█'.repeat(Math.max(4, Math.min(f.value.length, 18)));
+  const e = getEntry(f.cat, f.value);
+  return mode === 'fake' ? e.fake : e.token;
+}
+/* zwraca {out, segs, count}; collector: {counts:{}, total:0} */
+function anonString(text, opts, collector){
+  const matches = detect(text, opts);
+  if (!matches.length) return { out: text, segs: [{ t: text }], changed: false };
+  const segs = []; let pos = 0, out = '';
+  for (const f of matches){
+    if (f.start > pos){ const t = text.slice(pos, f.start); segs.push({ t }); out += t; }
+    const rep = replacementFor(f, opts.mode);
+    segs.push({ t: rep, cat: f.cat }); out += rep; pos = f.end;
+    if (collector){ collector.counts[f.cat] = (collector.counts[f.cat] || 0) + 1; collector.total++; }
+  }
+  if (pos < text.length){ const t = text.slice(pos); segs.push({ t }); out += t; }
+  return { out, segs, changed: true };
+}
+/* przywracanie: etykiety i dane fikcyjne -> oryginały */
+function restoreText(text){
+  let out = text, count = 0;
+  const reps = [];
+  for (const e of state.order){ reps.push([e.token, e.original]); reps.push([e.fake, e.original]); }
+  reps.sort((a,b) => b[0].length - a[0].length);
+  for (const [from, to] of reps){
+    if (!from) continue;
+    const re = new RegExp(escRe(from), 'g');
+    out = out.replace(re, () => { count++; return to; });
+  }
+  return { out, count };
+}
+
+/* =====================  OBSŁUGA PLIKÓW  ===================== */
+const NS = {
+  w: 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+  a: 'http://schemas.openxmlformats.org/drawingml/2006/main',
+  s: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+  text: 'urn:oasis:names:tc:opendocument:xmlns:text:1.0',
+  dc: 'http://purl.org/dc/elements/1.1/',
+  cp: 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
+  meta: 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
+  xml: 'http://www.w3.org/XML/1998/namespace'
+};
+const TEXT_EXTS = ['txt','csv','md','log','json','xml','html','htm','vcs','vcf','ics','rtf','tsv','yaml','yml','eml'];
+const MIMES = {
+  docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt:'application/vnd.oasis.opendocument.text',
+  ods:'application/vnd.oasis.opendocument.spreadsheet',
+  odp:'application/vnd.oasis.opendocument.presentation'
+};
+const extOf = name => (name.toLowerCase().match(/\.([a-z0-9]+)$/) || [,''])[1];
+const baseOf = name => name.replace(/\.[a-z0-9]+$/i, '');
+
+function readSmartText(buf){
+  try { return new TextDecoder('utf-8', { fatal:true }).decode(buf); }
+  catch { try { return new TextDecoder('windows-1250').decode(buf); }
+          catch { return new TextDecoder('utf-8').decode(buf); } }
+}
+function parseXml(str){
+  const doc = new DOMParser().parseFromString(str, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('Błąd parsowania XML');
+  return doc;
+}
+function serializeXml(doc, origStr){
+  let out = new XMLSerializer().serializeToString(doc);
+  const decl = (origStr.match(/^<\?xml[^>]*\?>/) || [])[0];
+  if (decl){ out = out.replace(/^<\?xml[^>]*\?>\s*/, ''); out = decl + '\n' + out; }
+  return out;
+}
+/* scala tekst runów akapitu, anonimizuje i zapisuje do pierwszego runu */
+function anonTextElems(elems, opts, collector){
+  if (!elems.length) return false;
+  const joined = elems.map(el => el.textContent).join('');
+  if (!joined.trim()) return false;
+  const r = anonString(joined, opts, collector);
+  if (!r.changed) return false;
+  elems[0].textContent = r.out;
+  elems[0].setAttributeNS(NS.xml, 'xml:space', 'preserve');
+  for (let i = 1; i < elems.length; i++) elems[i].textContent = '';
+  return true;
+}
+function anonParagraphs(doc, paraNS, paraNames, textNS, textName, opts, collector){
+  let changed = false;
+  for (const pn of paraNames){
+    const paras = [...doc.getElementsByTagNameNS(paraNS, pn)];
+    for (const p of paras){
+      const ts = [...p.getElementsByTagNameNS(textNS, textName)];
+      if (anonTextElems(ts, opts, collector)) changed = true;
+    }
+  }
+  return changed;
+}
+/* akapity ODF: sklejamy węzły tekstowe (span-y, zakładki itd.) */
+function anonOdfParagraph(p, opts, collector){
+  const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+  const nodes = []; let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  if (!nodes.length) return false;
+  const joined = nodes.map(t => t.nodeValue).join('');
+  if (!joined.trim()) return false;
+  const r = anonString(joined, opts, collector);
+  if (!r.changed) return false;
+  nodes[0].nodeValue = r.out;
+  for (let i = 1; i < nodes.length; i++) nodes[i].nodeValue = '';
+  return true;
+}
+async function processZipXml(zip, part, fn){
+  const f = zip.file(part); if (!f) return false;
+  const orig = await f.async('string');
+  const doc = parseXml(orig);
+  const changed = fn(doc);
+  if (changed) zip.file(part, serializeXml(doc, orig));
+  return changed;
+}
+async function cleanMetadata(zip, kind, collector){
+  let touched = false;
+  const wipe = (doc, ns, tag) => {
+    for (const el of [...doc.getElementsByTagNameNS(ns, tag)]){
+      if (el.textContent.trim()){ el.textContent = 'Anonim'; touched = true; }
+    }
+    return touched;
+  };
+  if (kind === 'ooxml'){
+    await processZipXml(zip, 'docProps/core.xml', doc => {
+      wipe(doc, NS.dc, 'creator'); wipe(doc, NS.cp, 'lastModifiedBy'); return touched; });
+    await processZipXml(zip, 'docProps/app.xml', doc => {
+      for (const tag of ['Company','Manager'])
+        for (const el of [...doc.getElementsByTagName(tag)])
+          if (el.textContent.trim()){ el.textContent = ''; touched = true; }
+      return touched; });
+  } else {
+    await processZipXml(zip, 'meta.xml', doc => {
+      wipe(doc, NS.dc, 'creator'); wipe(doc, NS.meta, 'initial-creator'); return touched; });
+  }
+  if (touched && collector) collector.meta = true;
+  return touched;
+}
+
+/* ---------- DOCX ---------- */
+async function handleDocx(buf, opts, collector){
+  const zip = await JSZip.loadAsync(buf);
+  const parts = Object.keys(zip.files).filter(p =>
+    /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/.test(p));
+  for (const part of parts)
+    await processZipXml(zip, part, doc =>
+      anonParagraphs(doc, NS.w, ['p'], NS.w, 't', opts, collector));
+  await cleanMetadata(zip, 'ooxml', collector);
+  return zip.generateAsync({ type:'blob', mimeType: MIMES.docx, compression:'DEFLATE' });
+}
+/* ---------- PPTX ---------- */
+async function handlePptx(buf, opts, collector){
+  const zip = await JSZip.loadAsync(buf);
+  const parts = Object.keys(zip.files).filter(p =>
+    /^ppt\/(slides|notesSlides|slideMasters|slideLayouts)\/[^/]+\.xml$/.test(p));
+  for (const part of parts)
+    await processZipXml(zip, part, doc =>
+      anonParagraphs(doc, NS.a, ['p'], NS.a, 't', opts, collector));
+  await cleanMetadata(zip, 'ooxml', collector);
+  return zip.generateAsync({ type:'blob', mimeType: MIMES.pptx, compression:'DEFLATE' });
+}
+/* ---------- XLSX ---------- */
+function anonXlsxCells(doc, opts, collector){
+  let changed = false;
+  for (const c of [...doc.getElementsByTagNameNS(NS.s, 'c')]){
+    const t = c.getAttribute('t');
+    if (t === 's') continue; /* indeks do sharedStrings */
+    if (t === 'inlineStr'){
+      const ts = [...c.getElementsByTagNameNS(NS.s, 't')];
+      if (anonTextElems(ts, opts, collector)) changed = true;
+      continue;
+    }
+    const v = c.getElementsByTagNameNS(NS.s, 'v')[0];
+    if (!v) continue;
+    const raw = v.textContent;
+    if (t === 'str'){
+      const r = anonString(raw, opts, collector);
+      if (r.changed){ v.textContent = r.out; changed = true; }
+      continue;
+    }
+    /* komórki liczbowe: PESEL/NIP/REGON/konto zapisane jako liczba */
+    if (!/^\d{9,26}$/.test(raw)) continue;
+    const r = anonString(raw, opts, collector);
+    if (r.changed){
+      c.setAttribute('t', 'inlineStr');
+      c.removeChild(v);
+      const is = doc.createElementNS(NS.s, 'is');
+      const te = doc.createElementNS(NS.s, 't');
+      te.textContent = r.out; is.appendChild(te); c.appendChild(is);
+      changed = true;
+    }
+  }
+  return changed;
+}
+async function handleXlsx(buf, opts, collector){
+  const zip = await JSZip.loadAsync(buf);
+  await processZipXml(zip, 'xl/sharedStrings.xml', doc => {
+    let ch = false;
+    for (const si of [...doc.getElementsByTagNameNS(NS.s, 'si')]){
+      const ts = [...si.getElementsByTagNameNS(NS.s, 't')];
+      if (anonTextElems(ts, opts, collector)) ch = true;
+    }
+    return ch;
+  });
+  const sheets = Object.keys(zip.files).filter(p => /^xl\/worksheets\/sheet\d+\.xml$/.test(p));
+  for (const part of sheets)
+    await processZipXml(zip, part, doc => anonXlsxCells(doc, opts, collector));
+  await cleanMetadata(zip, 'ooxml', collector);
+  return zip.generateAsync({ type:'blob', mimeType: MIMES.xlsx, compression:'DEFLATE' });
+}
+/* ---------- ODT / ODS / ODP ---------- */
+async function handleOdf(buf, ext, opts, collector){
+  const zip = await JSZip.loadAsync(buf);
+  for (const part of ['content.xml', 'styles.xml'])
+    await processZipXml(zip, part, doc => {
+      let ch = false;
+      for (const tag of ['p','h'])
+        for (const p of [...doc.getElementsByTagNameNS(NS.text, tag)])
+          if (anonOdfParagraph(p, opts, collector)) ch = true;
+      return ch;
+    });
+  await cleanMetadata(zip, 'odf', collector);
+  return zip.generateAsync({ type:'blob', mimeType: MIMES[ext], compression:'DEFLATE' });
+}
+/* ---------- PDF (ekstrakcja tekstu) ---------- */
+async function handlePdf(buf, opts, collector){
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let full = '', emptyPages = 0;
+  for (let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    let lastY = null, line = '', pageTxt = '';
+    for (const it of tc.items){
+      const y = Math.round(it.transform[5]);
+      if (lastY !== null && Math.abs(y - lastY) > 2){ pageTxt += line.trimEnd() + '\n'; line = ''; }
+      line += it.str + (it.hasEOL ? '' : ' ');
+      lastY = y;
+    }
+    pageTxt += line.trimEnd();
+    if (!pageTxt.trim()) emptyPages++;
+    full += (i > 1 ? '\n\n===== Strona ' + i + ' =====\n\n' : '') + pageTxt;
+  }
+  const r = anonString(full, opts, collector);
+  return {
+    blob: new Blob([r.out], { type:'text/plain;charset=utf-8' }),
+    segs: r.segs,
+    scanWarning: emptyPages === pdf.numPages && pdf.numPages > 0
+  };
+}
+/* ---------- XLS (stary format przez SheetJS) ---------- */
+function handleXlsLegacy(buf, opts, collector){
+  const wb = XLSX.read(buf, { type:'array' });
+  for (const name of wb.SheetNames){
+    const ws = wb.Sheets[name];
+    for (const addr of Object.keys(ws)){
+      if (addr[0] === '!') continue;
+      const cell = ws[addr];
+      let raw = null;
+      if (cell.t === 's' && typeof cell.v === 'string') raw = cell.v;
+      else if (cell.t === 'n' && Number.isInteger(cell.v) && String(cell.v).length >= 9) raw = String(cell.v);
+      if (raw === null) continue;
+      const r = anonString(raw, opts, collector);
+      if (r.changed){
+        cell.t = 's'; cell.v = r.out;
+        delete cell.w; delete cell.r; delete cell.h; delete cell.f;
+      }
+    }
+  }
+  const out = XLSX.write(wb, { type:'array', bookType:'xlsx' });
+  return new Blob([out], { type: MIMES.xlsx });
+}
+/* ---------- router ---------- */
+async function processFile(file, opts){
+  const ext = extOf(file.name);
+  const collector = { counts:{}, total:0, meta:false };
+  const res = { name:file.name, ext, counts:collector.counts, collector,
+                warnings:[], infos:[], blob:null, outName:null, segs:null };
+  try {
+    if (['gdoc','gsheet','gslides'].includes(ext)){
+      res.infos.push('To skrót do pliku w chmurze Google — treść nie znajduje się na dysku. Otwórz dokument i pobierz go jako DOCX / XLSX / PPTX (Plik → Pobierz), a następnie wgraj tutaj.');
+      return res;
+    }
+    if (ext === 'doc' || ext === 'ppt'){
+      res.infos.push('Format binarny Office 97–2003. Otwórz plik w Wordzie/PowerPoincie, zapisz jako .' + ext + 'x i wgraj ponownie — wtedy anonimizacja zachowa pełną strukturę.');
+      return res;
+    }
+    const buf = await file.arrayBuffer();
+    if (TEXT_EXTS.includes(ext) || ext === ''){
+      const text = readSmartText(buf);
+      const r = anonString(text, opts, collector);
+      res.blob = new Blob([r.out], { type:'text/plain;charset=utf-8' });
+      res.outName = baseOf(file.name) + '_anonim.' + (ext || 'txt');
+      res.segs = r.segs;
+      if (ext === 'rtf') res.warnings.push('RTF koduje polskie znaki sekwencjami sterującymi — nazwiska z diakrytykami mogą nie zostać wykryte. Pewniejszy wynik da zapis jako .docx.');
+    } else if (ext === 'docx'){
+      res.blob = await handleDocx(buf, opts, collector);
+      res.outName = baseOf(file.name) + '_anonim.docx';
+    } else if (ext === 'pptx'){
+      res.blob = await handlePptx(buf, opts, collector);
+      res.outName = baseOf(file.name) + '_anonim.pptx';
+    } else if (ext === 'xlsx' || ext === 'xlsm' || ext === 'xltx'){
+      res.blob = await handleXlsx(buf, opts, collector);
+      res.outName = baseOf(file.name) + '_anonim.xlsx';
+      if (ext === 'xlsm') res.warnings.push('Plik z makrami zapisano jako .xlsx (makra usunięte).');
+    } else if (['odt','ods','odp'].includes(ext)){
+      res.blob = await handleOdf(buf, ext, opts, collector);
+      res.outName = baseOf(file.name) + '_anonim.' + ext;
+    } else if (ext === 'pdf'){
+      const r = await handlePdf(buf, opts, collector);
+      res.blob = r.blob; res.segs = r.segs;
+      res.outName = baseOf(file.name) + '_anonim.txt';
+      res.infos.push('Z PDF wyodrębniono i zanonimizowano warstwę tekstową (wynik: .txt). Układ graficzny nie jest odtwarzany.');
+      if (r.scanWarning) res.warnings.push('Nie znaleziono warstwy tekstowej — to prawdopodobnie skan. Wykonaj najpierw OCR.');
+    } else if (ext === 'xls'){
+      res.blob = handleXlsLegacy(buf, opts, collector);
+      res.outName = baseOf(file.name) + '_anonim.xlsx';
+      res.warnings.push('Stary format XLS przekonwertowano do XLSX — część formatowania mogła zostać uproszczona, formuły w zmienionych komórkach usunięto.');
+    } else {
+      /* nieznane rozszerzenie — próba potraktowania jako tekst */
+      const text = readSmartText(buf);
+      if (/\uFFFD{3,}|\u0000/.test(text.slice(0, 2000)))
+        throw new Error('Nieobsługiwany format pliku (.' + ext + ').');
+      const r = anonString(text, opts, collector);
+      res.blob = new Blob([r.out], { type:'text/plain;charset=utf-8' });
+      res.outName = baseOf(file.name) + '_anonim.' + ext;
+      res.segs = r.segs;
+      res.infos.push('Nieznane rozszerzenie — plik potraktowano jako tekstowy.');
+    }
+    res.total = collector.total;
+    if (collector.meta) res.infos.push('Wyczyszczono metadane autora dokumentu.');
+    if (res.blob && collector.total === 0)
+      res.infos.push('Nie wykryto danych wrażliwych w wybranych kategoriach — plik zapisano bez zmian treści.');
+  } catch (err){
+    res.error = err.message || String(err);
+  }
+  return res;
+}
+
+/* =====================  UI  ===================== */
+const $ = id => document.getElementById(id);
+const escHtml = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* --- zakładki --- */
+const tabs = [...document.querySelectorAll('.tab')];
+tabs.forEach(t => t.addEventListener('click', () => {
+  tabs.forEach(x => x.setAttribute('aria-selected', x === t));
+  document.querySelectorAll('.panel').forEach(p =>
+    p.classList.toggle('active', p.id === t.getAttribute('aria-controls')));
+}));
+
+/* --- chipsy kategorii --- */
+const chipsBox = $('chips');
+for (const d of DETECTORS){
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chip'; b.dataset.cat = d.id;
+  b.setAttribute('aria-pressed', String(!d.off));
+  b.style.setProperty('--dotc', 'var(--c-' + d.id + ')');
+  b.innerHTML = '<span class="dot"></span>' + escHtml(d.label);
+  b.addEventListener('click', () => {
+    b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+    runTextPane();
+  });
+  chipsBox.appendChild(b);
+}
+function buildOpts(){
+  const cats = new Set([...chipsBox.querySelectorAll('.chip[aria-pressed="true"]')].map(c => c.dataset.cat));
+  const customRes = buildCustomRegexes($('custom').value);
+  if (!customRes.length) cats.delete('FRAZA');
+  return { mode: document.querySelector('input[name="mode"]:checked').value, cats, customRes };
+}
+
+/* --- render segmentów z podświetleniem --- */
+function renderSegs(segs, mode, el, cap = 30000){
+  let html = '', used = 0;
+  for (const s of segs){
+    if (used > cap){ html += '\n… (podgląd skrócony)'; break; }
+    used += s.t.length;
+    if (s.cat) html += '<mark class="' + (mode === 'black' ? 'black' : '') +
+      '" style="--mc:var(--c-' + s.cat + ')" title="' + escHtml(KAT_LABEL[s.cat] || s.cat) + '">' + escHtml(s.t) + '</mark>';
+    else html += escHtml(s.t);
+  }
+  el.innerHTML = html;
+}
+const countsHtml = counts => Object.entries(counts)
+  .sort((a,b) => b[1] - a[1])
+  .map(([k,v]) => '<span class="cnt" style="background:var(--c-' + k + ')">' + escHtml(KAT_LABEL[k] || k) + ': <b>' + v + '</b></span>')
+  .join('');
+
+/* =====================  ZAKŁADKA: TEKST  ===================== */
+let txtTimer = null, lastTxtOut = '';
+function runTextPane(){
+  clearTimeout(txtTimer);
+  txtTimer = setTimeout(() => {
+    const src = $('txtIn').value;
+    if (!src.trim()){ $('txtOut').innerHTML = ''; $('txtStats').textContent = ''; lastTxtOut = ''; return; }
+    const opts = buildOpts();
+    const col = { counts:{}, total:0 };
+    const r = anonString(src, opts, col);
+    lastTxtOut = r.out;
+    renderSegs(r.segs, opts.mode, $('txtOut'));
+    $('txtStats').textContent = col.total
+      ? 'Wykryto ' + col.total + ' danych w ' + Object.keys(col.counts).length + ' kategoriach. Sprawdź podświetlenia przed skopiowaniem.'
+      : 'Nie wykryto danych wrażliwych w wybranych kategoriach.';
+    refreshKey();
+  }, 220);
+}
+$('txtIn').addEventListener('input', runTextPane);
+$('custom').addEventListener('input', runTextPane);
+document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', runTextPane));
+$('txtCopy').addEventListener('click', async () => {
+  if (!lastTxtOut) return;
+  await navigator.clipboard.writeText(lastTxtOut);
+  $('txtCopy').textContent = 'Skopiowano ✓';
+  setTimeout(() => $('txtCopy').textContent = 'Kopiuj', 1400);
+});
+$('txtDemo').addEventListener('click', () => {
+  $('txtIn').value = 'W dniu 15 marca 2024 r. Jan Kowalski, zamieszkały przy ul. Marszałkowskiej 12/4, 00-624 Warszawa (PESEL: 44051401359, dowód: ABC412345), zawarł umowę z ABC Consulting Sp. z o.o. (NIP: 123-456-32-18, REGON: 123456785, KRS 0000123456) na kwotę 245 000,00 zł netto.\n\nWynagrodzenie płatne na rachunek PL61 1090 1014 0000 0712 1981 2874. Osoba kontaktowa: Anna Nowak, tel. 600 000 000, e-mail: anna.nowak@example.com. Przedmiotem umowy jest doradztwo w zakresie restrukturyzacji spółki zależnej — XYZ Holdings S.A.';
+  runTextPane();
+});
+
+/* =====================  ZAKŁADKA: PLIKI  ===================== */
+const results = [], resultsBox = $('results');
+const drop = $('drop'), fileInput = $('fileInput');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fileInput.click(); } });
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+fileInput.addEventListener('change', () => { handleFiles(fileInput.files); fileInput.value = ''; });
+
+async function handleFiles(fileList){
+  const files = [...fileList];
+  if (!files.length) return;
+  const opts = buildOpts();
+  for (const f of files){
+    const card = document.createElement('div');
+    card.className = 'file-card';
+    card.innerHTML = '<div class="fc-head"><div class="fc-ic">…</div><div><div class="fc-name">' +
+      escHtml(f.name) + '</div><div class="fc-sub"><span class="spin" style="border-color:#ccd;border-top-color:var(--accent)"></span>Przetwarzanie…</div></div></div>';
+    resultsBox.prepend(card);
+    /* eslint-disable no-await-in-loop */
+    const res = await processFile(f, opts);
+    results.push(res);
+    renderFileCard(card, res);
+    refreshKey(); refreshToolbar();
+  }
+}
+function renderFileCard(card, res){
+  const icon = (res.ext || '?').slice(0,5).toUpperCase();
+  let html = '<div class="fc-head"><div class="fc-ic">' + escHtml(icon) + '</div><div>' +
+    '<div class="fc-name">' + escHtml(res.name) + '</div>' +
+    '<div class="fc-sub">' + (res.error ? 'Błąd przetwarzania'
+      : res.blob ? 'Wykryto danych: <b>' + res.total + '</b>' + (res.outName ? ' → ' + escHtml(res.outName) : '')
+      : 'Wymagane działanie') + '</div></div>' +
+    '<div class="fc-actions"></div></div>';
+  if (res.total > 0) html += '<div class="fc-counts">' + countsHtml(res.counts) + '</div>';
+  for (const w of res.warnings) html += '<div class="fc-warn">' + escHtml(w) + '</div>';
+  for (const i of res.infos) html += '<div class="fc-info">' + escHtml(i) + '</div>';
+  if (res.error) html += '<div class="fc-warn">' + escHtml(res.error) + '</div>';
+  card.innerHTML = html;
+  const actions = card.querySelector('.fc-actions');
+  if (res.blob){
+    const a = document.createElement('a');
+    a.className = 'btn sm'; a.textContent = 'Pobierz';
+    a.href = URL.createObjectURL(res.blob); a.download = res.outName;
+    actions.appendChild(a);
+  }
+  if (res.segs && res.segs.some(s => s.cat)){
+    const b = document.createElement('button');
+    b.className = 'btn ghost sm'; b.type = 'button'; b.textContent = 'Podgląd';
+    const pv = document.createElement('div');
+    pv.className = 'out'; pv.style.display = 'none';
+    pv.style.borderTop = '1px solid var(--line)'; pv.style.marginTop = '10px'; pv.style.minHeight = '0';
+    b.addEventListener('click', () => {
+      const show = pv.style.display === 'none';
+      if (show && !pv.innerHTML) renderSegs(res.segs, buildOpts().mode, pv, 8000);
+      pv.style.display = show ? 'block' : 'none';
+      b.textContent = show ? 'Ukryj podgląd' : 'Podgląd';
+    });
+    actions.appendChild(b);
+    card.appendChild(pv);
+  }
+}
+function refreshToolbar(){
+  const done = results.filter(r => r.blob);
+  $('zipAll').disabled = done.length < 2;
+  $('clearFiles').disabled = results.length === 0;
+  const total = results.reduce((s,r) => s + (r.total || 0), 0);
+  $('filesStats').textContent = results.length
+    ? 'Plików: ' + results.length + ' · wykrytych danych łącznie: ' + total : '';
+}
+$('clearFiles').addEventListener('click', () => {
+  results.length = 0; resultsBox.innerHTML = ''; refreshToolbar();
+});
+$('zipAll').addEventListener('click', async () => {
+  const zip = new JSZip(); const seen = {};
+  for (const r of results){
+    if (!r.blob) continue;
+    let name = r.outName;
+    if (seen[name]) name = name.replace(/(\.[a-z0-9]+)$/i, '_' + (++seen[r.outName]) + '$1');
+    else seen[name] = 1;
+    zip.file(name, r.blob);
+  }
+  const blob = await zip.generateAsync({ type:'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'dokumenty_anonim.zip';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+/* =====================  ZAKŁADKA: PRZYWRACANIE  ===================== */
+let resTimer = null, lastResOut = '';
+$('resIn').addEventListener('input', () => {
+  clearTimeout(resTimer);
+  resTimer = setTimeout(() => {
+    const src = $('resIn').value;
+    if (!src.trim()){ $('resOut').textContent = ''; $('resStats').textContent = ''; lastResOut = ''; return; }
+    if (!state.order.length){
+      $('resOut').textContent = src;
+      $('resStats').textContent = 'Klucz sesji jest pusty — najpierw zanonimizuj plik lub tekst w tej karcie.';
+      lastResOut = src; return;
+    }
+    const r = restoreText(src);
+    lastResOut = r.out;
+    $('resOut').textContent = r.out;
+    $('resStats').textContent = 'Przywrócono ' + r.count + ' wartości.';
+  }, 220);
+});
+$('resCopy').addEventListener('click', async () => {
+  if (!lastResOut) return;
+  await navigator.clipboard.writeText(lastResOut);
+  $('resCopy').textContent = 'Skopiowano ✓';
+  setTimeout(() => $('resCopy').textContent = 'Kopiuj', 1400);
+});
+
+/* =====================  KLUCZ SESJI  ===================== */
+function refreshKey(){
+  $('keyCount').textContent = state.order.length;
+  const tb = $('keyTable').querySelector('tbody');
+  tb.innerHTML = state.order.map(e =>
+    '<tr><td>' + escHtml(e.original) + '</td><td>' + escHtml(e.token) + '</td><td>' +
+    escHtml(e.fake) + '</td><td class="cat">' + escHtml(KAT_LABEL[e.cat] || e.cat) + '</td></tr>').join('');
+}
+$('keyClear').addEventListener('click', e => {
+  e.preventDefault();
+  clearKey(); refreshKey();
+  $('resStats').textContent = 'Klucz sesji wyczyszczony.';
+});
+$('keyCsv').addEventListener('click', e => {
+  e.preventDefault();
+  const btn = $('keyCsv');
+  if (!state.order.length){
+    const prevTxt = btn.textContent;
+    btn.textContent = 'Brak wpisów do eksportu';
+    setTimeout(() => btn.textContent = prevTxt, 2200);
+    return;
+  }
+  const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const rows = ['oryginal;etykieta;dane_fikcyjne;kategoria',
+    ...state.order.map(x => [x.original, x.token, x.fake, KAT_LABEL[x.cat] || x.cat].map(q).join(';'))];
+  const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'klucz_pseudonimizacji.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  const prevTxt = btn.textContent;
+  btn.textContent = 'Wyeksportowano ✓';
+  setTimeout(() => btn.textContent = prevTxt, 1800);
+});
+
+</script>
+</body>
+</html>

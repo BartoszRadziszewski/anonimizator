@@ -1,0 +1,10 @@
+# Dane robocze i wyniki anonimizacji nigdy do repozytorium
+*.csv
+*.docx
+*.xlsx
+*.pdf
+*.zip
+klucz*
+.DS_Store
+Thumbs.db
+desktop.ini
